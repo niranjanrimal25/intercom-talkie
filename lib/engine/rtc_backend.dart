@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -126,12 +125,14 @@ class WebRtcBackend implements RtcBackend {
   }
 
   @override
-  Future<RtcPeer> createPeer() async {
+  Future<RtcPeer> createPeer(RtcMicrophone microphone) async {
     final configuration = <String, dynamic>{
       'iceServers': <dynamic>[],
       'sdpSemantics': 'unified-plan',
     };
     final peerConnection = await createPeerConnection(configuration);
+    final nativeMic = microphone as _WebRtcMicrophone;
+    await peerConnection.addTrack(nativeMic._track, nativeMic._stream);
     return _WebRtcPeer(peerConnection);
   }
 
@@ -257,6 +258,8 @@ class _WebRtcPeer implements RtcPeer {
         return 'disconnected';
       case RTCIceConnectionState.RTCIceConnectionStateClosed:
         return 'closed';
+      case RTCIceConnectionState.RTCIceConnectionStateCount:
+        return 'new';
     }
   }
 

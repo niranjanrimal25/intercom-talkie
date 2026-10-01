@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intercom_talkie/core/beacon.dart';
 import 'package:intercom_talkie/engine/intercom_engine.dart';
 import 'package:intercom_talkie/engine/rtc_backend.dart';
 import 'package:intercom_talkie/engine/settings.dart';
@@ -25,20 +25,15 @@ class FakeTrack implements RtcAudioTrack {
   String get id => _id;
 
   @override
-  bool get enabled$ => enabled;
-
-  @override
   Future<void> setEnabled(bool value) async {
     enabled = value;
   }
 }
 
 class FakeMicrophone implements RtcMicrophone {
-  final track = FakeTrack('local-mic');
-  bool closed = false;
-
   @override
-  RtcAudioTrack? get track$ => track;
+  final FakeTrack track = FakeTrack('local-mic');
+  bool closed = false;
 
   @override
   Future<void> close() async {

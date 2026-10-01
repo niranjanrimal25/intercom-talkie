@@ -539,6 +539,7 @@ class IntercomEngine extends ChangeNotifier {
           AppLog.instance
               .d(_tag, 'Connect to $target failed: ${NetUtils.describeError(error)}');
         }
+        _finalizeSession(epoch);
         if (_epoch != epoch) {
           return;
         }
@@ -788,6 +789,7 @@ class IntercomEngine extends ChangeNotifier {
 
   void _onSessionEstablished(_Session session) {
     session.iceWatchdog?.cancel();
+    _lastNotifiedMicOpen = false; // re-announce mic state to the new peer
     if (!_interrupted) {
       _setState(IntercomState.connected);
     } else {

@@ -113,10 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 engine.state == IntercomState.reconnecting ||
                 engine.state == IntercomState.connecting;
             if (live) {
-              return _CallPanel(
-                engine: engine,
-                onEnd: () => engine.stop(),
-              );
+              return _CallPanel(engine: engine, onEnd: () => engine.stop());
             }
             return _SetupPanel(
               engine: engine,
@@ -160,9 +157,11 @@ class _SetupPanel extends StatelessWidget {
         if (engine.state == IntercomState.discovering ||
             engine.state == IntercomState.starting)
           _ProgressBanner(
-              engine.state == IntercomState.discovering
-                  ? 'Looking for the host phone…'
-                  : 'Starting…'),
+            engine.state == IntercomState.discovering
+                ? 'Looking for the host phone…'
+                : 'Starting…',
+            onCancel: engine.stop,
+          ),
         if (engine.lastError != null)
           Card(
             color: scheme.errorContainer,
@@ -211,7 +210,7 @@ class _SetupPanel extends StatelessWidget {
           onConnect: onStartClient,
         ),
         const SizedBox(height: 12),
-        _GuideCard(engine: engine),
+        _GuideCard(),
       ],
     );
   }
@@ -239,7 +238,7 @@ class _WaitingBanner extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'On the other phone: connect to this hotspot, open Intercom '
-              'Talkie and tap “Join the other phone”.',
+              'Talkie and tap "Join the other phone".',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -388,7 +387,8 @@ class _ManualHostCard extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Host IP address',
                 border: OutlineInputBorder(),
@@ -417,10 +417,6 @@ class _ManualHostCard extends StatelessWidget {
 }
 
 class _GuideCard extends StatelessWidget {
-  const _GuideCard({required this.engine});
-
-  final IntercomEngine engine;
-
   @override
   Widget build(BuildContext context) {
     final isAndroid = Platform.isAndroid;
@@ -433,20 +429,20 @@ class _GuideCard extends StatelessWidget {
             Text('How it works — 3 steps',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            _GuideStep(
+            const _GuideStep(
               number: '1',
               text: 'Pair each Bluetooth intercom to its phone in the '
                   'system Bluetooth settings (like a headset).',
             ),
-            _GuideStep(
+            const _GuideStep(
               number: '2',
               text: 'On phone 1 enable the Wi-Fi hotspot, open this app and '
-                  'tap “Host on this phone”.',
+                  'tap "Host on this phone".',
             ),
-            _GuideStep(
+            const _GuideStep(
               number: '3',
               text: 'On phone 2 join that Wi-Fi, open this app and tap '
-                  '“Join the other phone”. Talk!',
+                  '"Join the other phone". Talk!',
             ),
             const Divider(height: 24),
             Text(
@@ -518,12 +514,10 @@ class _CallPanel extends StatelessWidget {
   const _CallPanel({
     required this.engine,
     required this.onEnd,
-    required this.onManualHost,
   });
 
   final IntercomEngine engine;
   final VoidCallback onEnd;
-  final VoidCallback onManualHost;
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +537,7 @@ class _CallPanel extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                _StateBine),
+                _StateBadge(engine: engine),
                 const SizedBox(height: 8),
                 Text(
                   engine.peerName.isEmpty ? '…' : engine.peerName,
@@ -557,9 +551,7 @@ class _CallPanel extends StatelessWidget {
                   formatDuration(engine.sessionDuration),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: scheme.onSurfaceVariant,
-                        fontFeatures: [
-                          FontFeature.tabularFigures(),
-                        ],
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                 ),
                 const SizedBox(height: 12),
@@ -569,7 +561,8 @@ class _CallPanel extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     StatusChip(
-                      label: engine.role == IntercomRole.host ? 'Host' : 'Client',
+                      label:
+                          engine.role == IntercomRole.host ? 'Host' : 'Client',
                       color: scheme.primary,
                       icon: engine.role == IntercomRole.host
                           ? Icons.wifi_tethering
@@ -638,8 +631,7 @@ class _CallPanel extends StatelessWidget {
                 onTapCancel: () => engine.setPttActive(false),
               ),
             RoundActionButton(
-              icon:
-                  engine.speakerOn ? Icons.volume_up : Icons.headphones,
+              icon: engine.speakerOn ? Icons.volume_up : Icons.headphones,
               label: engine.speakerOn ? 'Speaker' : 'Headset',
               active: engine.speakerOn,
               onPressed: () => engine.setSpeakerOn(!engine.speakerOn),
@@ -683,56 +675,13 @@ class _StateBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (engine.state) {
-      IntercomState.connected => (
-          'CONNECTED',
-          Colors.green,
-          Icons.graphic_eq
-        ),
+      IntercomState.connected => ('CONNECTED', Colors.green, Icons.graphic_eq),
       IntercomState.paused => ('ON HOLD', Colors.orange, Icons.phone_in_talk),
-      IntercomState.connecting => (
-          'CONNECTING',
-          Colors.blue,
-          Icons.sync
-        ),
-      IntercomState.reconnecting => (
-          'RECONNECTING',
-          Colors.amber,
-          Icons.autorenew
-        ),
+      IntercomState.connecting => ('CONNECTING', Colors.blue, Icons.sync),
+      IntercomState.reconnecting =>
+        ('RECONNECTING', Colors.amber, Icons.autorenew),
       _ => ('ACTIVE', Colors.blue, Icons.radio),
     };
     return StatusChip(label: label, color: color, icon: icon);
-  }
-}
-sWidget {
-  const _StateBadge({required this.engine});
-
-  final IntercomEngine engine;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color, icon) = switch (engine.state) {
-      IntercomState.connected => (
-          'CONNECTED',
-          Colors.green,
-          Icons.graphic_eq
-        ),
-      IntercomState.paused => ('ON HOLD', Colors.orange, Icons.phone_in_talk),
-      IntercomState.connecting => (
-          'CONNECTING',
-          Colors.blue,
-          Icons.sync
-        ),
-      IntercomState.reconnecting => (
-          'RECONNECTING',
-          Colors.amber,
-          Icons.autorenew
-        ),
-      _ => ('ACTIVE', Colors.blue, Icons.radio),
-    };
-    return StatusChip(label: label, color: color, icon: icon);
-  }
-}
-n: icon);
   }
 }

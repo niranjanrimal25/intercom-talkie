@@ -127,7 +127,11 @@ class BeaconListener {
       final host = parseBeacon(datagram.data);
       if (host != null && !completer.isCompleted) {
         timeoutTimer?.cancel();
-        completer.complete(host);
+        completer.complete(DiscoveredHost(
+          name: host.name,
+          address: datagram.address.address,
+          port: host.port,
+        ));
       }
     });
 

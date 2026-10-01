@@ -94,10 +94,10 @@ class IntercomService : Service() {
                 }
             }
             // Re-request audio focus so our listener is in the chain again.
-            requeueFocusRequest(context)
+            requeueFocusRequest()
         }
 
-        private fun requeueFocusRequest(context: Context) {
+        private fun requeueFocusRequest() {
             val am = audioManager ?: return
             val request = focusRequest ?: return
             try {
@@ -352,12 +352,13 @@ class IntercomService : Service() {
                 val restartIntent = Intent(this, IntercomService::class.java).apply {
                     action = ACTION_START
                 }
-                val pending = PendingIntent.getForegroundService(
-                    this,
-                    2,
-                    restartIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
+                val flags =
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                val pending = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    PendingIntent.getForegroundService(this, 2, restartIntent, flags)
+                } else {
+                    PendingIntent.getService(this, 2, restartIntent, flags)
+                }
                 val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
                 alarmManager.set(
                     AlarmManager.ELAPSED_REALTIME,
