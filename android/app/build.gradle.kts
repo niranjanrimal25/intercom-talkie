@@ -19,7 +19,8 @@ android {
         applicationId = "com.example.intercom_talkie"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // flutter_webrtc requires 21+; 24 keeps every device we care about.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -36,6 +37,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    // NotificationCompat + ServiceCompat helpers for the foreground service.
+    implementation("androidx.core:core-ktx:1.15.0")
 }
 
 kotlin {
