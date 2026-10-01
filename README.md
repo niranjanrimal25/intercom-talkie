@@ -137,9 +137,21 @@ On first launch, **allow**:
 > switcher), iOS stops it — that is an OS-level limit for every app. Just
 > reopen it; it reconnects automatically.
 
-### 4. CI builds (optional)
+### 4. CI builds (optional, one-time setup)
 
-Every push runs GitHub Actions (`.github/workflows/ci.yml`):
+The repo ships a ready-made GitHub Actions workflow at
+[`ci/flutter-ci.yml`](ci/flutter-ci.yml). To enable it, copy it into place
+once (the bot that pushes code cannot create workflow files):
+
+```bash
+mkdir -p .github/workflows
+cp ci/flutter-ci.yml .github/workflows/ci.yml
+git add .github/workflows/ci.yml
+git commit -m "ci: enable CI"
+git push
+```
+
+Every push then runs:
 
 - `Analyze and test` — static analysis + the full unit/widget test suite.
 - `Android release APK` — a signed-with-debug-key release APK artifact you can
