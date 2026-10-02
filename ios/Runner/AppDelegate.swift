@@ -2,7 +2,7 @@ import AVFoundation
 import Flutter
 import UIKit
 
-/// Native bridge for Intercom Talkie.
+/// Native bridge for Talkie.
 ///
 /// Implements the `intercom.native` method channel and the
 /// `intercom.native/events` event channel that the Dart side expects

@@ -133,7 +133,7 @@ class IntercomService : Service() {
             }
             else -> {
                 // ACTION_START or a sticky restart.
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Intercom Talkie"
+                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Talkie"
                 val text = intent?.getStringExtra(EXTRA_TEXT) ?: "Session active"
                 startSession(title, text)
                 return START_STICKY
@@ -200,7 +200,7 @@ class IntercomService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Intercom session",
+                "Talkie session",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = "Keeps the intercom link alive"
@@ -235,7 +235,7 @@ class IntercomService : Service() {
 
     private fun buildNotification(title: String, text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            .setSmallIcon(R.drawable.ic_stat_talkie)
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
@@ -257,7 +257,7 @@ class IntercomService : Service() {
         try {
             manager.notify(
                 NOTIFICATION_ID,
-                buildNotification("Intercom Talkie", text),
+                buildNotification("Talkie", text),
             )
         } catch (_: Exception) {
             // Ignore.

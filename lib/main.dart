@@ -18,7 +18,7 @@ Future<void> main() async {
 
   final engine = IntercomEngine(settings: settings);
 
-  AppLog.instance.i('boot', 'Intercom Talkie starting');
+  AppLog.instance.i('boot', 'Talkie starting');
 
   runApp(IntercomApp(engine: engine));
 }
@@ -31,7 +31,7 @@ class IntercomApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Intercom Talkie',
+      title: 'Talkie',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

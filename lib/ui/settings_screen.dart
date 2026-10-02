@@ -167,7 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                           content: Text(
-                              'Open Android Settings → Apps → Intercom Talkie '
+                              'Open Android Settings → Apps → Talkie '
                               '→ Battery to allow background use.')),
                     );
                   }

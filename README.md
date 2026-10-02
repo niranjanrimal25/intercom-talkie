@@ -1,9 +1,9 @@
-# Intercom Talkie
+# Talkie
 
 **Offline phone-to-phone intercom bridge for two Bluetooth intercoms.**
 
 You have two Bluetooth intercoms (helmet units, walkie-style headsets, …) that
-cannot pair with each other directly. Intercom Talkie solves that with two
+cannot pair with each other directly. Talkie solves that with two
 phones and a Wi-Fi hotspot — **no cell tower, no internet, no SIM data
 required**:
 
@@ -105,7 +105,7 @@ On first launch, **allow** the permissions when prompted:
 
 Also recommended (the app has a button for this in Settings):
 
-- **Disable battery optimization** for Intercom Talkie so Android keeps the
+- **Disable battery optimization** for Talkie so Android keeps the
   link alive with the screen off.
 - On aggressive OEMs (Xiaomi, Oppo, Vivo, Huawei…), enable *Auto-start* /
   *Allow background activity* for the app.
@@ -168,10 +168,10 @@ Every push then runs:
 2. On **phone 1** (Android in the diagram above):
    1. Enable the Wi-Fi hotspot (Android: Settings → Hotspot & tethering;
       iPhone: Settings → Personal Hotspot).
-   2. Open Intercom Talkie → **“Host on this phone”**.
+   2. Open Talkie → **“Host on this phone”**.
 3. On **phone 2**:
    1. Join that Wi-Fi hotspot.
-   2. Open Intercom Talkie → **“Join the other phone”**.
+   2. Open Talkie → **“Join the other phone”**.
    3. The app finds the host automatically (via UDP beacon / gateway scan).
       If it can't, type the host IP manually — on Android hotspots usually
       `192.168.43.1`, on iPhone hotspots `172.20.10.1`.

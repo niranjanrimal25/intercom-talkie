@@ -48,7 +48,7 @@ class MainActivity : FlutterActivity() {
         when (method) {
             "startService" -> {
                 val map = arguments as? Map<*, *>
-                val title = (map?.get("title") as? String) ?: "Intercom Talkie"
+                val title = (map?.get("title") as? String) ?: "Talkie"
                 val text = (map?.get("text") as? String) ?: "Session active"
                 val intent = Intent(this, IntercomService::class.java).apply {
                     action = IntercomService.ACTION_START

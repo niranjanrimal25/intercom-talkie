@@ -75,7 +75,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Intercom Talkie'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/logo.png', width: 28, height: 28),
+            const SizedBox(width: 10),
+            const Text('Talkie'),
+          ],
+        ),
         centerTitle: false,
         actions: [
           IconButton(
@@ -237,8 +244,8 @@ class _WaitingBanner extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'On the other phone: connect to this hotspot, open Intercom '
-              'Talkie and tap "Join the other phone".',
+              'On the other phone: connect to this hotspot, open Talkie '
+              'and tap "Join the other phone".',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),

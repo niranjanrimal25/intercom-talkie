@@ -1111,7 +1111,7 @@ class IntercomEngine extends ChangeNotifier {
     bridge.onEvent = handleNativeEvent;
     _lastNotifiedMicOpen = false;
     await bridge.startForegroundService(
-      title: 'Intercom Talkie',
+      title: 'Talkie',
       text: _serviceText(),
     );
     await bridge.setKeepScreenOn(settings.keepScreenOn);

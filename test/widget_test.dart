@@ -16,7 +16,7 @@ void main() {
 
     await tester.pumpWidget(IntercomApp(engine: engine));
 
-    expect(find.text('Intercom Talkie'), findsOneWidget);
+    expect(find.text('Talkie'), findsOneWidget);
     expect(find.text('Phone 1 — Share Hotspot & Host'), findsOneWidget);
     expect(find.text('Phone 2 — Join Hotspot'), findsOneWidget);
     expect(find.text('Host on this phone'), findsOneWidget);
