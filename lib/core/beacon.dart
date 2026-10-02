@@ -31,7 +31,7 @@ class BeaconBroadcaster {
   Future<void> start({
     required String hostName,
     required int tcpPort,
-    required Duration interval = const Duration(milliseconds: 1200),
+    Duration interval = const Duration(milliseconds: 1200),
   }) async {
     if (_running) {
       return;

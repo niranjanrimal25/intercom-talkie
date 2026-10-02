@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.example.intercom_talkie"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android compiles against SDK 37; SDK versions are
+    // backward compatible, so pinning the highest required version is safe.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

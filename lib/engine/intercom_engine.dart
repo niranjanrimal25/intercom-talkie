@@ -474,10 +474,8 @@ class IntercomEngine extends ChangeNotifier {
 
   Future<void> _runClientLoop(int epoch, {String? preferredHost}) async {
     var backoff = const Duration(seconds: 1);
-    var knownHost = preferredHost ?? settings.lastHostAddress;
-    if (knownHost != null && knownHost.isEmpty) {
-      knownHost = null;
-    }
+    final storedHost = settings.lastHostAddress;
+    String? knownHost = preferredHost ?? (storedHost.isEmpty ? null : storedHost);
 
     while (_epoch == epoch && _running) {
       if (state != IntercomState.connecting &&

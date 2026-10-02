@@ -281,6 +281,13 @@ class _WebRtcPeer implements RtcPeer {
     _wire();
   }
 
+  static RtcDescription _toDescription(RTCSessionDescription description) {
+    return RtcDescription(
+      type: description.type ?? 'offer',
+      sdp: description.sdp ?? '',
+    );
+  }
+
   @override
   Future<RtcDescription> createOffer() async {
     final description = await _peer.createOffer(const <String, dynamic>{});

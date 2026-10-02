@@ -124,7 +124,7 @@ class _RouteSheetState extends State<_RouteSheet> {
                   children: [
                     for (final route in _routes)
                       ListTile(
-                        leading: _iconFor(route),
+                        leading: Icon(_iconFor(route)),
                         title: Text(route.name),
                         subtitle: Text(route.describeType()),
                         trailing: route.selected
