@@ -166,8 +166,24 @@ class IntercomService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (_: Exception) {
-            // Fallback without a service type (e.g. restricted restart).
-            startForeground(NOTIFICATION_ID, notification)
+            // Retry with the microphone type only: the connectedDevice type
+            // has extra runtime prerequisites (e.g. BLUETOOTH_CONNECT) that
+            // may not hold on every device.
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+            } catch (second: Exception) {
+                NativeEvents.post("serviceError", second.message ?: "startForeground failed")
+                cleanup()
+                stopSelf()
+            }
         }
 
         if (!sessionRunning) {
@@ -249,21 +265,38 @@ class IntercomService : Service() {
     }
 
     private fun acquireLocks() {
-        val power = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = power.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "IntercomTalkie:session",
-        ).apply { acquire(6 * 60 * 60 * 1000L) }
+        // Every lock is best-effort: a missing permission or a vendor quirk
+        // must degrade the session, never crash the process.
+        try {
+            val power = getSystemService(POWER_SERVICE) as PowerManager
+            wakeLock = power.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "IntercomTalkie:session",
+            ).apply { acquire(6 * 60 * 60 * 1000L) }
+        } catch (error: Exception) {
+            NativeEvents.post("lockError", "wake: ${error.message}")
+        }
 
-        val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        wifiLock = wifi.createWifiLock(
-            WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-            "IntercomTalkie:wifi",
-        ).apply { acquire() }
+        try {
+            val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+            wifiLock = wifi.createWifiLock(
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                "IntercomTalkie:wifi",
+            ).apply { acquire() }
+        } catch (error: Exception) {
+            NativeEvents.post("lockError", "wifi: ${error.message}")
+        }
 
-        multicastLock = wifi.createMulticastLock("IntercomTalkie:beacon").apply {
-            setReferenceCounted(false)
-            acquire()
+        try {
+            val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+            multicastLock = wifi.createMulticastLock("IntercomTalkie:beacon").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (error: Exception) {
+            // Needs CHANGE_WIFI_MULTICAST_STATE (declared in the manifest);
+            // without it beacon reception still works on most hotspot LANs.
+            NativeEvents.post("lockError", "multicast: ${error.message}")
         }
     }
 
@@ -313,16 +346,29 @@ class IntercomService : Service() {
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(attributes)
-            .setWillPauseWhenDucked(true)
-            .setOnAudioFocusChangeListener(listener, mainHandler)
-            .build()
-        focusRequest = request
-        try {
-            am.requestAudioFocus(request)
-        } catch (_: Exception) {
-            // Ignore — plugin also manages focus.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(attributes)
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener(listener, mainHandler)
+                .build()
+            focusRequest = request
+            try {
+                am.requestAudioFocus(request)
+            } catch (_: Exception) {
+                // Ignore — plugin also manages focus.
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            try {
+                am.requestAudioFocus(
+                    listener,
+                    AudioManager.STREAM_VOICE_CALL,
+                    AudioManager.AUDIOFOCUS_GAIN,
+                )
+            } catch (_: Exception) {
+                // Ignore — plugin also manages focus.
+            }
         }
     }
 

@@ -249,7 +249,14 @@ class IntercomEngine extends ChangeNotifier {
     _setState(IntercomState.starting);
     AppLog.instance.i(_tag, 'Starting HOST session ($_sessionId)');
 
-    await _platformSetup();
+    try {
+      await _platformSetup();
+    } catch (error) {
+      lastError = 'Could not start the background service: $error';
+      AppLog.instance.e(_tag, 'Platform setup failed: $error');
+      await stop();
+      return;
+    }
 
     try {
       _server = await SignalingServer.bind(port: signalingPort);
@@ -285,7 +292,14 @@ class IntercomEngine extends ChangeNotifier {
     _setState(IntercomState.discovering);
     AppLog.instance.i(_tag, 'Starting CLIENT session ($_sessionId)');
 
-    await _platformSetup();
+    try {
+      await _platformSetup();
+    } catch (error) {
+      lastError = 'Could not start the background service: $error';
+      AppLog.instance.e(_tag, 'Platform setup failed: $error');
+      await stop();
+      return;
+    }
 
     if (manualHost != null && manualHost.isNotEmpty) {
       connectingTarget = manualHost;
@@ -1043,6 +1057,18 @@ class IntercomEngine extends ChangeNotifier {
         AppLog.instance.w(_tag, 'Media services reset — recovering audio');
         unawaited(backend.recoverAudioSession());
         _applyAudioState(restartMic: true);
+        break;
+      case 'lockError':
+        AppLog.instance.w(_tag, 'Native lock error: ${event.data ?? '?'}');
+        break;
+      case 'serviceError':
+        AppLog.instance.e(_tag, 'Foreground service error: ${event.data ?? '?'}');
+        break;
+      case 'missingPermissions':
+        AppLog.instance.e(
+            _tag, 'Service missing permissions: ${event.data ?? '?'}');
+        lastError = 'Microphone permission was revoked — start again.';
+        unawaited(stop());
         break;
       default:
         break;

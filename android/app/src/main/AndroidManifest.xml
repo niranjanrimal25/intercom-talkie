@@ -5,6 +5,9 @@
     <!-- Networking over the local hotspot -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- MulticastLock for reliable UDP beacon reception; enforced at
+         MulticastLock.acquire() — missing it crashes with SecurityException -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Keep the CPU/Wi-Fi/radio awake while the intercom is live -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Foreground service keeps the app alive when backgrounded/killed -->
