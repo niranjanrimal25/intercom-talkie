@@ -71,7 +71,8 @@ class IntercomService : Service() {
                     val devices = am.availableCommunicationDevices
                     val target = devices.firstOrNull {
                         it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_HEADSET
+                            // LE Audio headsets (API 31+, same guard as this block).
+                            it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
                     } ?: devices.firstOrNull {
                         it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
                             it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||

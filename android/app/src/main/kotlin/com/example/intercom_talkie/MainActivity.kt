@@ -141,7 +141,9 @@ class MainActivity : FlutterActivity() {
 
     private fun routeTypeFor(device: AudioDeviceInfo): String? = when (device.type) {
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLUETOOTH_HEADSET,
+        // LE Audio headsets: API 31+ constant, inlined at compile time so
+        // referencing it is safe on older runtimes too.
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
         -> "bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADSET,
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
