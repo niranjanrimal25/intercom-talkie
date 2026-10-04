@@ -27,7 +27,7 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IntercomTalkieNativeBridge")
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IntercomTalkieNativeBridge") else { return }
     let messenger = registrar.messenger()
 
     let methodChannel = FlutterMethodChannel(name: "intercom.native", binaryMessenger: messenger)
@@ -319,11 +319,13 @@ import UIKit
 // MARK: - FlutterEventChannel.StreamHandler
 
 extension AppDelegate: FlutterStreamHandler {
-  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) {
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
+    return nil
   }
 
-  func onCancel(withArguments arguments: Any?) {
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
     eventSink = nil
+    return nil
   }
 }
