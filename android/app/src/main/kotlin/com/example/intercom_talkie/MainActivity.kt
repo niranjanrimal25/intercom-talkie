@@ -6,14 +6,48 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
+import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+
+    companion object {
+        private const val ENGINE_ID = "talkie_engine"
+    }
+
+    /**
+     * This activity runs on a *cached* FlutterEngine. Swiping the app away
+     * then destroys only the Activity — the engine (and with it the Dart
+     * isolate, the WebRTC session and the signaling sockets) keeps running
+     * inside the process, which the foreground service keeps alive. Opening
+     * the app again simply re-attaches to the still-live session.
+     */
+    override fun getCachedEngineId(): String = ENGINE_ID
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Must happen before super.onCreate(): the activity delegate looks
+        // the engine up in the cache during super.onCreate().
+        prewarmEngine()
+        super.onCreate(savedInstanceState)
+    }
+
+    private fun prewarmEngine() {
+        if (FlutterEngineCache.getInstance().get(ENGINE_ID) != null) {
+            return
+        }
+        val engine = FlutterEngine(this)
+        engine.dartExecutor.executeDartEntrypoint(
+            DartExecutor.DartEntrypoint.createDefault(),
+        )
+        FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

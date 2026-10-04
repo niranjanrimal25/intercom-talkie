@@ -210,6 +210,8 @@ class IntercomEngine extends ChangeNotifier {
   bool _pttActive = false;
   bool _speakerOn = false;
   bool _interrupted = false;
+  Timer? _interruptionWatchdog;
+  DateTime _lastRouteRecover = DateTime.fromMillisecondsSinceEpoch(0);
 
   // ----- Internals -----
   int _epoch = 0;
@@ -248,6 +250,8 @@ class IntercomEngine extends ChangeNotifier {
     _sessionId = _newSessionId();
     _setState(IntercomState.starting);
     AppLog.instance.i(_tag, 'Starting HOST session ($_sessionId)');
+    settings.lastRole = 'host';
+    unawaited(settings.save());
 
     try {
       await _platformSetup();
@@ -291,6 +295,8 @@ class IntercomEngine extends ChangeNotifier {
     _sessionId = _newSessionId();
     _setState(IntercomState.discovering);
     AppLog.instance.i(_tag, 'Starting CLIENT session ($_sessionId)');
+    settings.lastRole = 'client';
+    unawaited(settings.save());
 
     try {
       await _platformSetup();
@@ -310,11 +316,19 @@ class IntercomEngine extends ChangeNotifier {
   }
 
   /// Fully stops everything and returns to idle.
-  Future<void> stop() async {
+  ///
+  /// [fromUser] marks an intentional stop (End button, notification action):
+  /// only then is the persisted role cleared, so an app kill followed by a
+  /// relaunch can silently rejoin the last session.
+  Future<void> stop({bool fromUser = false}) async {
     if (!_running && state == IntercomState.idle) {
       return;
     }
-    AppLog.instance.i(_tag, 'Stopping session');
+    AppLog.instance.i(_tag, 'Stopping session${fromUser ? ' (user)' : ''}');
+    if (fromUser) {
+      settings.lastRole = '';
+      unawaited(settings.save());
+    }
     _epoch++;
     _running = false;
     _setState(IntercomState.stopping);
@@ -586,7 +600,7 @@ class IntercomEngine extends ChangeNotifier {
     try {
       await listener.start();
       final host = await listener.waitForBeacon(
-        timeout: const Duration(milliseconds: 2500),
+        timeout: const Duration(milliseconds: 3500),
       );
       await listener.stop();
       if (host == null) {
@@ -1033,6 +1047,23 @@ class IntercomEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-asserts the audio pipeline after a route change (e.g. a Bluetooth
+  /// headset just connected) so voice flows through the new device with no
+  /// user action. Throttled — route changes often arrive in bursts.
+  void _onAudioRouteChanged() {
+    if (!isLive) {
+      return;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastRouteRecover) < const Duration(milliseconds: 800)) {
+      return;
+    }
+    _lastRouteRecover = now;
+    unawaited(backend.recoverAudioSession());
+    unawaited(bridge.recoverAudio());
+    _applyAudioState(restartMic: true);
+  }
+
   // -------------------------------------------------------------------
   // Native events (phone calls, focus, routes)
   // -------------------------------------------------------------------
@@ -1049,9 +1080,10 @@ class IntercomEngine extends ChangeNotifier {
         break;
       case 'routeChanged':
         AppLog.instance.i(_tag, 'Audio route changed: ${event.data ?? '?'}');
+        _onAudioRouteChanged();
         break;
       case 'serviceStopped':
-        unawaited(stop());
+        unawaited(stop(fromUser: true));
         break;
       case 'mediaServicesReset':
         AppLog.instance.w(_tag, 'Media services reset — recovering audio');
@@ -1085,6 +1117,15 @@ class IntercomEngine extends ChangeNotifier {
     _setState(IntercomState.paused);
     _applyAudioState();
     _updateServiceText();
+    // Safety net: if the platform never reports the end of the interruption
+    // (missed event, OEM quirk), force a recovery instead of staying paused.
+    _interruptionWatchdog?.cancel();
+    _interruptionWatchdog = Timer(const Duration(seconds: 20), () {
+      if (_interrupted) {
+        AppLog.instance.w(_tag, 'Interruption end never arrived — resuming');
+        _onCallInterruptionEnded();
+      }
+    });
   }
 
   void _onCallInterruptionEnded() {
@@ -1092,6 +1133,8 @@ class IntercomEngine extends ChangeNotifier {
       return;
     }
     _interrupted = false;
+    _interruptionWatchdog?.cancel();
+    _interruptionWatchdog = null;
     AppLog.instance.i(_tag, 'Interruption ended — resuming audio');
     unawaited(bridge.recoverAudio());
     unawaited(backend.recoverAudioSession());
@@ -1197,6 +1240,8 @@ class IntercomEngine extends ChangeNotifier {
     sessionDuration = Duration.zero;
     stats = LinkStats();
     _interrupted = false;
+    _interruptionWatchdog?.cancel();
+    _interruptionWatchdog = null;
   }
 
   void _setState(IntercomState next) {

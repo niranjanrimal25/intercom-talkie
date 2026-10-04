@@ -198,14 +198,15 @@ Every push then runs:
 
 | Symptom | Fix |
 | --- | --- |
-| “No host found” on the client | Make sure both phones are on the *same* hotspot; on iPhone allow *Local Network* permission (Settings → Privacy & Security → Local Network). Try manual IP entry. |
+| “No host found” on the client | Make sure both phones are on the *same* hotspot. Discovery uses UDP beacons **plus** an active probe/response exchange, so it also works behind broadcast-filtering access points. On iPhone, grant *Local Network* permission the first time it is asked for (Settings → Privacy & Security → Local Network → Talkie) — the join will then succeed on the next automatic retry. Manual IP entry works too. |
 | Passcode rejected | Both phones must use the same passcode in Settings (empty = open). |
 | Audio comes from the phone speaker instead of the intercom | Pair the intercom in system Bluetooth settings, then pick it under the headphones icon. On Android tap *Prefer headset/intercom*. |
 | Echo / howling | Enable *Push-to-talk mode* in Settings, or lower volume on the intercom. WebRTC echo cancellation handles most cases when the intercom mic is positioned away from the speaker. |
 | Link drops when screen turns off (Android) | Disable battery optimization (Settings screen has a button), allow background activity / auto-start on OEM ROMs. |
 | Link drops when a phone call comes in | Without VoLTE, a GSM call can briefly tear down the hotspot — the app reconnects automatically once the call ends and the hotspot returns. |
 | Can't hear anything but the timer runs | Check both intercoms are powered on and connected; check volume (press volume keys *during* the session — it adjusts the call stream). |
-| iOS app stops when backgrounded | Keep the session *live* before backgrounding (audio keeps it alive). Force-quit always stops the app — iOS limitation. |
+| iOS app stops when backgrounded | Background audio keeps a *live* session running with the screen off. Swiping the app away always kills it — an iOS platform rule no app can bypass; with *Rejoin after restart* enabled, opening Talkie again silently re-establishes the link. |
+| Android: audio stops when swiping the app away | Should not happen — the app runs on a cached Flutter engine inside the foreground service. If it does, check that the Talkie notification is present and that the ROM's battery manager isn't force-stopping the app (disable battery optimization from the Settings screen). |
 
 ---
 

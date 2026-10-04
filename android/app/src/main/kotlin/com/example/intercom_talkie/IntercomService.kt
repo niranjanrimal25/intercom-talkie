@@ -10,6 +10,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.wifi.WifiManager
@@ -53,6 +55,7 @@ class IntercomService : Service() {
         private var multicastLock: WifiManager.MulticastLock? = null
         private var focusRequest: AudioFocusRequest? = null
         private var audioManager: AudioManager? = null
+        private var deviceCallback: AudioDeviceCallback? = null
 
         /**
          * Re-asserts the communication audio setup after a phone call.
@@ -190,6 +193,7 @@ class IntercomService : Service() {
             sessionRunning = true
             acquireLocks()
             registerFocusListener()
+            registerDeviceCallback()
         } else {
             updateNotification(text)
         }
@@ -261,6 +265,98 @@ class IntercomService : Service() {
             )
         } catch (_: Exception) {
             // Ignore.
+        }
+    }
+
+    /**
+     * Watches for audio devices appearing/disappearing so call audio moves
+     * to a Bluetooth headset the instant it connects — no user action, no
+     * delay. Android delivers the current device list to this callback
+     * immediately on registration, so an already-connected headset is
+     * routed as soon as the session starts.
+     */
+    private fun registerDeviceCallback() {
+        if (deviceCallback != null) {
+            return
+        }
+        val am = audioManager
+            ?: (getSystemService(Context.AUDIO_SERVICE) as AudioManager).also {
+                audioManager = it
+            }
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                val headset = addedDevices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                } ?: return
+                routeToBluetooth(headset)
+            }
+
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                val lostBluetooth = removedDevices.any {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                }
+                if (lostBluetooth) {
+                    routeAfterBluetoothLost()
+                }
+            }
+        }
+        am.registerAudioDeviceCallback(callback, mainHandler)
+        deviceCallback = callback
+    }
+
+    private fun unregisterDeviceCallback() {
+        val callback = deviceCallback ?: return
+        try {
+            audioManager?.unregisterAudioDeviceCallback(callback)
+        } catch (_: Exception) {
+        }
+        deviceCallback = null
+    }
+
+    private fun routeToBluetooth(headset: AudioDeviceInfo) {
+        val am = audioManager ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val target = am.availableCommunicationDevices.firstOrNull {
+                    it.id == headset.id
+                } ?: headset
+                am.setCommunicationDevice(target)
+            } else {
+                am.startBluetoothSco()
+                am.isBluetoothScoOn = true
+            }
+            NativeEvents.post("routeChanged", "bluetooth")
+        } catch (error: Exception) {
+            NativeEvents.post("routeChanged", "bluetooth-failed: ${error.message}")
+        }
+    }
+
+    private fun routeAfterBluetoothLost() {
+        val am = audioManager ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val devices = am.availableCommunicationDevices
+                val fallback = devices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                        it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                        it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                } ?: devices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
+                if (fallback != null) {
+                    am.setCommunicationDevice(fallback)
+                }
+            } else {
+                try {
+                    am.stopBluetoothSco()
+                } catch (_: Exception) {
+                }
+                am.isBluetoothScoOn = false
+            }
+            NativeEvents.post("routeChanged", "bluetooth-lost")
+        } catch (_: Exception) {
         }
     }
 
@@ -388,6 +484,7 @@ class IntercomService : Service() {
     private fun cleanup() {
         sessionRunning = false
         abandonFocus()
+        unregisterDeviceCallback()
         releaseLocks()
     }
 

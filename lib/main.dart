@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/app_log.dart';
@@ -21,6 +23,21 @@ Future<void> main() async {
   AppLog.instance.i('boot', 'Talkie starting');
 
   runApp(IntercomApp(engine: engine));
+
+  // Auto-rejoin: if the previous session was killed (user swipe on iOS, OS
+  // memory pressure, crash) instead of ended deliberately, pick up right
+  // where it left off as soon as the app opens again.
+  if (settings.autoRejoin && settings.lastRole == 'host') {
+    AppLog.instance.i('boot', 'Auto-rejoining as HOST');
+    unawaited(engine.startHost());
+  } else if (settings.autoRejoin &&
+      settings.lastRole == 'client' &&
+      settings.lastHostAddress.isNotEmpty) {
+    AppLog.instance.i(
+        'boot', 'Auto-rejoining as CLIENT to ${settings.lastHostAddress}');
+    unawaited(
+        engine.startClient(manualHost: settings.lastHostAddress));
+  }
 }
 
 class IntercomApp extends StatelessWidget {

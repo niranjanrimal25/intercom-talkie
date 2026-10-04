@@ -120,7 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 engine.state == IntercomState.reconnecting ||
                 engine.state == IntercomState.connecting;
             if (live) {
-              return _CallPanel(engine: engine, onEnd: () => engine.stop());
+              return _CallPanel(
+                  engine: engine, onEnd: () => engine.stop(fromUser: true));
             }
             return _SetupPanel(
               engine: engine,

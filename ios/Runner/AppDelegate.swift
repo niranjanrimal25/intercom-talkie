@@ -190,6 +190,26 @@ import UIKit
     return routes
   }
 
+  /// Selects a Bluetooth headset as the preferred input the moment one
+  /// shows up, so call audio flows through it with no user action.
+  @discardableResult
+  private func preferBluetoothInput() -> Bool {
+    let session = audioSession
+    guard
+      let bluetooth = session.availableInputs?.first(where: {
+        $0.portType == .bluetoothHFP || $0.portType == .bluetoothLE
+      })
+    else { return false }
+    do {
+      try session.setPreferredInput(bluetooth)
+      try session.setActive(true)
+      return true
+    } catch {
+      NSLog("IntercomTalkie: Bluetooth route failed: \(error)")
+      return false
+    }
+  }
+
   private func selectAudioRoute(id: String) -> Bool {
     let session = audioSession
     if id == "io:builtin-speaker" {
@@ -237,6 +257,12 @@ import UIKit
         // A phone call, FaceTime, Siri... is taking over audio.
         self?.sendEvent("interruptionBegan")
       case .ended:
+        // Re-activate the session immediately (the call that interrupted us
+        // has released it); the Dart engine then re-asserts the whole audio
+        // pipeline. Unconditional: the intercom must always come back.
+        if let self = self {
+          try? self.audioSession.setActive(true)
+        }
         let optionsRaw = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0
         let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
         self?.sendEvent("interruptionEnded", options.contains(.shouldResume) ? "resume" : nil)
@@ -257,7 +283,13 @@ import UIKit
         let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw)
       {
         switch reason {
-        case .newDeviceAvailable: reasonText = "new device available"
+        case .newDeviceAvailable:
+          // A headset just connected — move call audio to it immediately.
+          if let self = self, self.preferBluetoothInput() {
+            reasonText = "bluetooth connected"
+          } else {
+            reasonText = "new device available"
+          }
         case .oldDeviceUnavailable: reasonText = "old device unavailable"
         case .categoryChange: reasonText = "category change"
         case .override: reasonText = "override"

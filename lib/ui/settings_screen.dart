@@ -141,6 +141,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             SwitchListTile(
+              secondary: const Icon(Icons.phonelink_setup),
+              title: const Text('Rejoin after restart'),
+              subtitle: const Text(
+                  'If the app is killed or dies, rejoining happens on the '
+                  'next launch — no need to tap Host or Join again.'),
+              value: settings.autoRejoin,
+              onChanged: (value) async {
+                setState(() => settings.autoRejoin = value);
+                await settings.save();
+              },
+            ),
+            SwitchListTile(
               secondary: const Icon(Icons.brightness_high),
               title: const Text('Keep screen on while active'),
               value: settings.keepScreenOn,
