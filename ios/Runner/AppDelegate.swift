@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import UniformTypeIdentifiers
 import UIKit
 
 /// Native bridge for Talkie.
@@ -11,6 +12,8 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var eventSink: FlutterEventSink?
   private var backgroundTaskId = UIBackgroundTaskIdentifier.invalid
+  private var musicPlayer: AVAudioPlayer?
+  private var pendingMusicPick: FlutterResult?
 
   // -------------------------------------------------------------------
   // App lifecycle
@@ -87,6 +90,36 @@ import UIKit
     case "requestIgnoreBatteryOptimizations":
       result(false)
 
+    case "pickMusicFile":
+      pickMusicFile(result: result)
+
+    case "musicLoad":
+      let path = (call.arguments as? [String: Any])?["path"] as? String ?? ""
+      result(musicLoad(path))
+
+    case "musicPlay":
+      musicPlayer?.play()
+      result(nil)
+
+    case "musicPause":
+      musicPlayer?.pause()
+      result(nil)
+
+    case "musicStop":
+      stopMusicPlayer()
+      result(nil)
+
+    case "musicSeek":
+      let ms = (call.arguments as? [String: Any])?["ms"] as? Int ?? 0
+      if let player = musicPlayer {
+        player.currentTime = Double(ms) / 1000.0
+      }
+      result(nil)
+
+    case "musicPosition":
+      let ms = Int(((musicPlayer?.currentTime ?? 0) * 1000.0).rounded())
+      result(ms)
+
     case "platformInfo":
       var systemInfo = utsname()
       uname(&systemInfo)
@@ -103,6 +136,41 @@ import UIKit
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // -------------------------------------------------------------------
+  // Shared music
+  // -------------------------------------------------------------------
+
+  private func pickMusicFile(result: @escaping FlutterResult) {
+    pendingMusicPick = result
+    let picker = UIDocumentPickerViewController(
+      forOpeningContentTypes: [UTType.audio],
+      asCopy: true
+    )
+    picker.delegate = self
+    picker.allowsMultipleSelection = false
+    window?.rootViewController?.present(picker, animated: true)
+  }
+
+  /// Prepares a local audio file; returns its duration in ms (0 = failure).
+  private func musicLoad(_ path: String) -> Int {
+    stopMusicPlayer()
+    guard !path.isEmpty, let url = URL(string: path) else { return 0 }
+    do {
+      let player = try AVAudioPlayer(contentsOf: url)
+      player.prepareToPlay()
+      musicPlayer = player
+      return Int(player.duration * 1000.0)
+    } catch {
+      NSLog("IntercomTalkie: musicLoad failed: \(error)")
+      return 0
+    }
+  }
+
+  private func stopMusicPlayer() {
+    musicPlayer?.stop()
+    musicPlayer = nil
   }
 
   // -------------------------------------------------------------------
@@ -345,6 +413,30 @@ import UIKit
     let id = backgroundTaskId
     backgroundTaskId = UIBackgroundTaskIdentifier.invalid
     UIApplication.shared.endBackgroundTask(id)
+  }
+}
+
+// MARK: - UIDocumentPickerDelegate (shared music picking)
+
+extension AppDelegate: UIDocumentPickerDelegate {
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    let result = pendingMusicPick
+    pendingMusicPick = nil
+    guard let picked = urls.first, let result = result else {
+      result?(nil)
+      return
+    }
+    // asCopy: true handed us a private copy in tmp — safe to keep using.
+    result([
+      "path": picked.path,
+      "name": picked.lastPathComponent,
+    ])
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    let result = pendingMusicPick
+    pendingMusicPick = nil
+    result?(nil)
   }
 }
 

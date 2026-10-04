@@ -187,6 +187,67 @@ class NativeBridge {
     }
   }
 
+  // -------------------------------------------------------------------
+  // Shared music (played on both phones in sync).
+  // -------------------------------------------------------------------
+
+  /// Opens the system audio-file picker. Returns `{path, name}` of a copy in
+  /// the app cache, or `null` when the user cancels.
+  Future<Map<String, String>?> pickMusicFile() async {
+    try {
+      final result = await _methods.invokeMethod('pickMusicFile');
+      if (result is Map) {
+        return result.map(
+          (key, value) => MapEntry(key.toString(), value.toString()),
+        );
+      }
+    } catch (error) {
+      AppLog.instance.w('native', 'pickMusicFile failed: $error');
+    }
+    return null;
+  }
+
+  /// Prepares an audio file for playback and returns its duration in ms
+  /// (0 when the file cannot be decoded).
+  Future<int> musicLoad(String path) async {
+    try {
+      final result =
+          await _methods.invokeMethod('musicLoad', <String, dynamic>{
+        'path': path,
+      });
+      return result is int ? result : 0;
+    } catch (error) {
+      AppLog.instance.w('native', 'musicLoad failed: $error');
+      return 0;
+    }
+  }
+
+  Future<void> musicPlay() async {
+    await _tryInvoke('musicPlay');
+  }
+
+  Future<void> musicPause() async {
+    await _tryInvoke('musicPause');
+  }
+
+  Future<void> musicStop() async {
+    await _tryInvoke('musicStop');
+  }
+
+  Future<void> musicSeek(int milliseconds) async {
+    await _tryInvoke('musicSeek', <String, dynamic>{'ms': milliseconds});
+  }
+
+  /// Current playback position in ms.
+  Future<int> musicPosition() async {
+    try {
+      final result = await _methods.invokeMethod('musicPosition');
+      return result is int ? result : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<Map<String, String>> platformInfo() async {
     try {
       final result = await _methods.invokeMethod('platformInfo');

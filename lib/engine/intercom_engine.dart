@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -199,6 +201,14 @@ class IntercomEngine extends ChangeNotifier {
   Duration sessionDuration = Duration.zero;
   LinkStats stats = LinkStats();
 
+  // ----- Shared music state -----
+  /// Title of the shared track ('' = none loaded).
+  String musicTitle = '';
+  /// A track is loaded (playing or paused).
+  bool musicActive = false;
+  /// The track is currently playing on this phone.
+  bool musicPlaying = false;
+
   bool get micMuted => _micMutedByUser;
   bool get pttActive => _pttActive;
   bool get speakerOn => _speakerOn;
@@ -212,6 +222,15 @@ class IntercomEngine extends ChangeNotifier {
   bool _interrupted = false;
   Timer? _interruptionWatchdog;
   DateTime _lastRouteRecover = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // Shared music internals.
+  bool _musicIsMaster = false;
+  String? _musicLocalPath;
+  String? _musicRecvPath;
+  IOSink? _musicSink;
+  int _musicExpectedSeq = 0;
+  Timer? _musicStartTimer;
+  Timer? _musicPositionTimer;
 
   // ----- Internals -----
   int _epoch = 0;
@@ -339,6 +358,8 @@ class IntercomEngine extends ChangeNotifier {
 
   @override
   void dispose() {
+    _musicStartTimer?.cancel();
+    _musicPositionTimer?.cancel();
     _epoch++;
     _running = false;
     _teardownAll();
@@ -795,6 +816,15 @@ class IntercomEngine extends ChangeNotifier {
           notifyListeners();
         }
         break;
+      case 'music_offer':
+      case 'music_chunk':
+      case 'music_ready':
+      case 'music_ack':
+      case 'music_start':
+      case 'music_position':
+      case 'music_control':
+        _onMusicSignal(session, message);
+        break;
       case 'bye':
         AppLog.instance.i(_tag, 'Peer said bye: ${message['reason'] ?? ''}');
         _endSession(session, 'peer left');
@@ -837,6 +867,7 @@ class IntercomEngine extends ChangeNotifier {
     }
     session.ended = true;
     AppLog.instance.w(_tag, 'Ending session: $reason');
+    _stopMusicLocal();
     session.iceWatchdog?.cancel();
     session.disconnectedGrace?.cancel();
     if (!session.iceConnected.isCompleted) {
@@ -1107,6 +1138,304 @@ class IntercomEngine extends ChangeNotifier {
     }
   }
 
+  // -------------------------------------------------------------------
+  // Shared music
+  // -------------------------------------------------------------------
+
+  /// Picks an audio file on this phone, transfers it to the peer over the
+  /// signaling link, and starts synchronized playback on BOTH phones.
+  Future<void> shareMusic() async {
+    final session = _session;
+    if (session == null || session.ended) {
+      AppLog.instance.w(_tag, 'shareMusic: no live session');
+      return;
+    }
+    final picked = await bridge.pickMusicFile();
+    if (picked == null) {
+      return; // User cancelled the picker.
+    }
+    final path = picked['path'] ?? '';
+    final name = picked['name'] ?? 'Audio';
+    if (path.isEmpty) {
+      return;
+    }
+    final durationMs = await bridge.musicLoad(path);
+    if (durationMs <= 0) {
+      AppLog.instance.e(_tag, 'musicLoad could not decode "$name"');
+      return;
+    }
+    _stopMusicLocal();
+    _musicIsMaster = true;
+    _musicLocalPath = path;
+    musicTitle = name;
+    _musicNotify();
+    try {
+      final bytes = await File(path).readAsBytes();
+      session.connection.send(SignalMessage('music_offer', <String, dynamic>{
+        'name': name,
+        'size': bytes.length,
+        'durationMs': durationMs,
+      }));
+      const chunkSize = 200000; // ~267 KB base64, under the 512 KB frame cap.
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        if (_session != session || session.ended) {
+          return; // Session died mid-transfer.
+        }
+        final chunk = bytes.sublist(offset, min(offset + chunkSize, bytes.length));
+        session.connection.send(SignalMessage('music_chunk', <String, dynamic>{
+          'seq': offset ~/ chunkSize,
+          'data': base64Encode(chunk),
+        }));
+      }
+      session.connection.send(SignalMessage('music_ready'));
+      AppLog.instance
+          .i(_tag, 'Music "${name}" sent (${bytes.length} bytes), waiting for peer');
+    } catch (error) {
+      AppLog.instance
+          .e(_tag, 'Music transfer failed: ${NetUtils.describeError(error)}');
+      _stopMusicLocal();
+    }
+  }
+
+  /// Pauses or resumes the shared track on both phones.
+  Future<void> toggleMusicPlayback() async {
+    if (!musicActive) {
+      return;
+    }
+    final action = musicPlaying ? 'pause' : 'resume';
+    _applyMusicControl(action);
+    _session?.connection
+        .send(SignalMessage('music_control', <String, dynamic>{'action': action}));
+  }
+
+  /// Stops the shared track on both phones.
+  Future<void> stopMusic() async {
+    _session?.connection.send(
+        SignalMessage('music_control', <String, dynamic>{'action': 'stop'}));
+    _stopMusicLocal();
+  }
+
+  void _onMusicSignal(_Session session, SignalMessage message) {
+    switch (message.type) {
+      case 'music_offer':
+        unawaited(_onMusicOffer(session, message));
+        break;
+      case 'music_chunk':
+        unawaited(_onMusicChunk(session, message));
+        break;
+      case 'music_ready':
+        unawaited(_onMusicReady(session));
+        break;
+      case 'music_ack':
+        if (message['ok'] == true) {
+          _musicStartBoth(session);
+        } else {
+          AppLog.instance.e(_tag, 'Peer could not decode the shared track');
+          _stopMusicLocal();
+        }
+        break;
+      case 'music_start':
+        _musicStartTimer?.cancel();
+        _musicStartTimer =
+            Timer(Duration(milliseconds: (message['delayMs'] as int?) ?? 900), () {
+          unawaited(_musicPlayLocal());
+        });
+        break;
+      case 'music_position':
+        unawaited(
+            _musicSyncPosition((message['positionMs'] as int?) ?? 0));
+        break;
+      case 'music_control':
+        _applyMusicControl((message['action'] as String?) ?? 'stop');
+        break;
+    }
+  }
+
+  Future<void> _onMusicOffer(_Session session, SignalMessage message) async {
+    final name = (message['name'] as String?) ?? 'Audio';
+    final size = (message['size'] as int?) ?? 0;
+    if (size <= 0 || size > 100 * 1024 * 1024) {
+      AppLog.instance.w(_tag, 'Rejected music offer: bad size $size');
+      session.connection
+          .send(SignalMessage('music_ack', <String, dynamic>{'ok': false}));
+      return;
+    }
+    _stopMusicLocal();
+    _musicIsMaster = false;
+    musicTitle = name;
+    _musicExpectedSeq = 0;
+    _musicRecvPath =
+        '${Directory.systemTemp.path}/talkie_music_${_sessionId}.audio';
+    _musicNotify();
+    AppLog.instance.i(_tag, 'Receiving music "$name" ($size bytes)');
+  }
+
+  Future<void> _onMusicChunk(_Session session, SignalMessage message) async {
+    if (_musicIsMaster || _musicRecvPath == null) {
+      return;
+    }
+    final seq = (message['seq'] as int?) ?? -1;
+    final data = message['data'] as String?;
+    if (data == null) {
+      return;
+    }
+    if (seq != _musicExpectedSeq) {
+      // TCP is ordered; a gap means a missed offer. Tolerate and continue.
+      AppLog.instance
+          .w(_tag, 'Music chunk gap: expected $_musicExpectedSeq, got $seq');
+    }
+    try {
+      _musicSink ??= File(_musicRecvPath!).openWrite();
+      _musicSink!.add(base64Decode(data));
+      _musicExpectedSeq = seq + 1;
+    } catch (error) {
+      AppLog.instance
+          .e(_tag, 'Music chunk write failed: ${NetUtils.describeError(error)}');
+    }
+  }
+
+  Future<void> _onMusicReady(_Session session) async {
+    if (_musicIsMaster) {
+      return;
+    }
+    final sink = _musicSink;
+    _musicSink = null;
+    if (sink != null) {
+      try {
+        await sink.flush();
+        await sink.close();
+      } catch (_) {
+        // Ignore — load below will surface any real problem.
+      }
+    }
+    final path = _musicRecvPath;
+    if (path == null) {
+      session.connection
+          .send(SignalMessage('music_ack', <String, dynamic>{'ok': false}));
+      return;
+    }
+    final durationMs = await bridge.musicLoad(path);
+    if (durationMs > 0) {
+      musicActive = true;
+      musicPlaying = false;
+      _musicNotify();
+      // Ack only after the file is decoded and the player is prepared, so
+      // the synchronized start hits a ready player on both sides.
+      session.connection
+          .send(SignalMessage('music_ack', <String, dynamic>{'ok': true}));
+      AppLog.instance.i(_tag, 'Music ready on peer side: "$musicTitle"');
+    } else {
+      session.connection
+          .send(SignalMessage('music_ack', <String, dynamic>{'ok': false}));
+      _stopMusicLocal();
+    }
+  }
+
+  void _musicStartBoth(_Session session) {
+    const leadMs = 900;
+    session.connection
+        .send(SignalMessage('music_start', <String, dynamic>{'delayMs': leadMs}));
+    _musicStartTimer?.cancel();
+    _musicStartTimer = Timer(const Duration(milliseconds: leadMs), () {
+      unawaited(_musicPlayLocal());
+    });
+  }
+
+  Future<void> _musicPlayLocal() async {
+    if (_musicLocalPath == null && _musicRecvPath == null) {
+      return;
+    }
+    await bridge.musicPlay();
+    musicActive = true;
+    musicPlaying = true;
+    _musicNotify();
+    if (_musicIsMaster) {
+      _musicPositionTimer?.cancel();
+      _musicPositionTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        final session = _session;
+        if (session == null || session.ended || !musicPlaying) {
+          return;
+        }
+        unawaited(_musicSendPosition(session));
+      });
+    }
+  }
+
+  Future<void> _musicSendPosition(_Session session) async {
+    final positionMs = await bridge.musicPosition();
+    session.connection.send(
+        SignalMessage('music_position', <String, dynamic>{'positionMs': positionMs}));
+  }
+
+  Future<void> _musicSyncPosition(int reportedMs) async {
+    if (_musicIsMaster || !musicActive) {
+      return;
+    }
+    final ownMs = await bridge.musicPosition();
+    if ((ownMs - reportedMs).abs() > 600) {
+      AppLog.instance.i(_tag,
+          'Music drift ${ownMs - reportedMs}ms — seeking to $reportedMs');
+      await bridge.musicSeek(reportedMs);
+    }
+  }
+
+  void _applyMusicControl(String action) {
+    switch (action) {
+      case 'pause':
+        unawaited(bridge.musicPause());
+        musicPlaying = false;
+        break;
+      case 'resume':
+        unawaited(bridge.musicPlay());
+        musicPlaying = true;
+        break;
+      case 'stop':
+        _stopMusicLocal();
+        return;
+    }
+    _musicNotify();
+  }
+
+  void _stopMusicLocal() {
+    _musicStartTimer?.cancel();
+    _musicStartTimer = null;
+    _musicPositionTimer?.cancel();
+    _musicPositionTimer = null;
+    final sink = _musicSink;
+    _musicSink = null;
+    final recv = _musicRecvPath;
+    if (sink != null) {
+      unawaited(sink.close().catchError((Object _) {}));
+    }
+    if (recv != null) {
+      unawaited(_deleteQuietly(recv));
+    }
+    _musicIsMaster = false;
+    _musicLocalPath = null;
+    _musicRecvPath = null;
+    _musicExpectedSeq = 0;
+    musicTitle = '';
+    musicActive = false;
+    musicPlaying = false;
+    unawaited(bridge.musicStop());
+    _musicNotify();
+  }
+
+  Future<void> _deleteQuietly(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Cache cleanup is best effort.
+    }
+  }
+
+  void _musicNotify() {
+    notifyListeners();
+  }
+
   void _onCallInterruptionBegan() {
     if (!isLive || _interrupted) {
       return;
@@ -1205,6 +1534,7 @@ class IntercomEngine extends ChangeNotifier {
   }
 
   Future<void> _teardownAll() async {
+    _stopMusicLocal();
     _stopSessionTimers();
     _cancelBeaconWatchdog();
     _failWaiters('engine stopping');

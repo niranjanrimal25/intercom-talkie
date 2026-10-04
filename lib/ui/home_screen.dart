@@ -616,6 +616,10 @@ class _CallPanel extends StatelessWidget {
             ),
           ),
         ),
+        if (engine.musicActive) ...[
+          const SizedBox(height: 16),
+          _MusicBar(engine: engine),
+        ],
         const SizedBox(height: 16),
         StatsRow(engine: engine),
         const SizedBox(height: 16),
@@ -643,6 +647,14 @@ class _CallPanel extends StatelessWidget {
               label: engine.speakerOn ? 'Speaker' : 'Headset',
               active: engine.speakerOn,
               onPressed: () => engine.setSpeakerOn(!engine.speakerOn),
+            ),
+            RoundActionButton(
+              icon: Icons.library_music,
+              label: 'Music',
+              active: engine.musicActive,
+              onPressed: engine.musicActive
+                  ? null
+                  : () => engine.shareMusic(),
             ),
           ],
         ),
@@ -691,5 +703,53 @@ class _StateBadge extends StatelessWidget {
       _ => ('ACTIVE', Colors.blue, Icons.radio),
     };
     return StatusChip(label: label, color: color, icon: icon);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Shared music: now-playing bar
+// ---------------------------------------------------------------------
+
+class _MusicBar extends StatelessWidget {
+  const _MusicBar({required this.engine});
+
+  final IntercomEngine engine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Icon(
+              engine.musicPlaying ? Icons.graphic_eq : Icons.music_note,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                engine.musicTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            IconButton(
+              tooltip: engine.musicPlaying ? 'Pause music' : 'Resume music',
+              icon: Icon(engine.musicPlaying ? Icons.pause : Icons.play_arrow),
+              onPressed: () => engine.toggleMusicPlayback(),
+            ),
+            IconButton(
+              tooltip: 'Stop music',
+              icon: const Icon(Icons.stop),
+              onPressed: () => engine.stopMusic(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -2,13 +2,18 @@ package com.example.intercom_talkie
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.WindowManager
+import java.io.File
+import java.io.FileOutputStream
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -20,7 +25,12 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val ENGINE_ID = "talkie_engine"
+        private const val PICK_MUSIC_REQUEST = 7501
     }
+
+    // Shared music playback + picker plumbing.
+    private var musicPlayer: MediaPlayer? = null
+    private var pendingMusicPick: MethodChannel.Result? = null
 
     /**
      * This activity runs on a *cached* FlutterEngine. Swiping the app away
@@ -153,6 +163,58 @@ class MainActivity : FlutterActivity() {
             "requestIgnoreBatteryOptimizations" -> {
                 result.success(requestBatteryExemption())
             }
+            "pickMusicFile" -> {
+                pendingMusicPick = result
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "audio/*"
+                }
+                try {
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(intent, PICK_MUSIC_REQUEST)
+                } catch (error: Exception) {
+                    pendingMusicPick = null
+                    result.error("pickMusic", error.message, null)
+                }
+            }
+            "musicLoad" -> {
+                val path = (arguments as? Map<*, *>)?.get("path") as? String ?: ""
+                result.success(musicLoad(path))
+            }
+            "musicPlay" -> {
+                try {
+                    musicPlayer?.start()
+                } catch (_: Exception) {
+                }
+                result.success(null)
+            }
+            "musicPause" -> {
+                try {
+                    musicPlayer?.pause()
+                } catch (_: Exception) {
+                }
+                result.success(null)
+            }
+            "musicStop" -> {
+                stopMusicPlayer()
+                result.success(null)
+            }
+            "musicSeek" -> {
+                val ms = (arguments as? Map<*, *>)?.get("ms") as? Int ?: 0
+                try {
+                    musicPlayer?.seekTo(ms)
+                } catch (_: Exception) {
+                }
+                result.success(null)
+            }
+            "musicPosition" -> {
+                val position = try {
+                    musicPlayer?.currentPosition ?: 0
+                } catch (_: Exception) {
+                    0
+                }
+                result.success(position)
+            }
             "platformInfo" -> {
                 result.success(
                     mapOf(
@@ -164,6 +226,102 @@ class MainActivity : FlutterActivity() {
             }
             else -> result.notImplemented()
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Shared music
+    // -----------------------------------------------------------------
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode != PICK_MUSIC_REQUEST) {
+            super.onActivityResult(requestCode, resultCode, data)
+            return
+        }
+        val result = pendingMusicPick
+        pendingMusicPick = null
+        val uri = data?.data
+        if (result == null) {
+            return
+        }
+        if (resultCode != RESULT_OK || uri == null) {
+            result.success(null)
+            return
+        }
+        // Copy off the SAF provider on a worker thread; the channel result
+        // must then be delivered back on the main thread.
+        Thread {
+            try {
+                val name = queryDisplayName(uri) ?: "shared-audio"
+                val safe = name.replace(Regex("[^A-Za-z0-9._ -]"), "_")
+                val outFile = File(
+                    cacheDir,
+                    "picked_${System.currentTimeMillis()}_$safe",
+                )
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
+                } ?: throw IllegalStateException("cannot open $uri")
+                runOnUiThread {
+                    result.success(
+                        mapOf("path" to outFile.absolutePath, "name" to name),
+                    )
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    result.error("pickMusic", error.message, null)
+                }
+            }
+        }.start()
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Prepares a local audio file; returns its duration in ms (0 = failure). */
+    private fun musicLoad(path: String): Int {
+        stopMusicPlayer()
+        if (path.isEmpty()) {
+            return 0
+        }
+        return try {
+            val player = MediaPlayer()
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            player.setDataSource(path)
+            player.prepare()
+            musicPlayer = player
+            player.duration
+        } catch (error: Exception) {
+            android.util.Log.w("Talkie", "musicLoad failed: $error")
+            stopMusicPlayer()
+            0
+        }
+    }
+
+    private fun stopMusicPlayer() {
+        try {
+            musicPlayer?.let {
+                if (it.isPlaying) it.stop()
+            }
+        } catch (_: Exception) {
+        }
+        try {
+            musicPlayer?.release()
+        } catch (_: Exception) {
+        }
+        musicPlayer = null
     }
 
     // -----------------------------------------------------------------

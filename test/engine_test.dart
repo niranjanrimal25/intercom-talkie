@@ -256,6 +256,29 @@ class FakeNativeBridge implements NativeBridge {
   @override
   Future<Map<String, String>> platformInfo() async =>
       const <String, String>{'platform': 'test'};
+
+  // ----- Shared music (not used by the engine tests) -----
+
+  @override
+  Future<Map<String, String>?> pickMusicFile() async => null;
+
+  @override
+  Future<int> musicLoad(String path) async => 0;
+
+  @override
+  Future<void> musicPlay() async {}
+
+  @override
+  Future<void> musicPause() async {}
+
+  @override
+  Future<void> musicStop() async {}
+
+  @override
+  Future<void> musicSeek(int milliseconds) async {}
+
+  @override
+  Future<int> musicPosition() async => 0;
 }
 
 // ---------------------------------------------------------------------

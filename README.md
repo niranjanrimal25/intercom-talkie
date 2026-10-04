@@ -194,6 +194,31 @@ Every push then runs:
 
 ---
 
+## Shared music
+
+Either person can start a song that plays **on both phones at once**, in
+sync, through both intercoms:
+
+1. While connected, tap **Music** in the call panel and pick an audio file
+   (MP3, AAC/M4A, FLAC, WAV, OGG — anything your phone can decode).
+2. The file is transferred over the intercom link itself (a few seconds for
+   a typical song, with the intercom staying live the whole time).
+3. Playback starts on both phones simultaneously; the sender keeps the
+   master clock and nudges the receiver back into sync if the phones drift.
+4. Either rider can pause, resume or stop the shared track from the
+   now-playing bar.
+
+Notes:
+
+- This works with **audio files you own** (picked from the system file
+  picker). Songs streaming from Spotify/Apple Music cannot be captured —
+  iOS forbids capturing other apps' audio entirely, and DRM'd streams are
+  protected on Android too.
+- Music plays through the active intercom audio route (Bluetooth headset).
+  If it comes out of the phone speaker on your device, pick the headset in
+  the route sheet (headphones icon).
+- The shared track stops automatically when the session ends.
+
 ## Troubleshooting
 
 | Symptom | Fix |
