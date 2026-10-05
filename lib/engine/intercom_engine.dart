@@ -231,6 +231,7 @@ class IntercomEngine extends ChangeNotifier {
   int _musicExpectedSeq = 0;
   Timer? _musicStartTimer;
   Timer? _musicPositionTimer;
+  bool _musicPausedByInterruption = false;
 
   // ----- Internals -----
   int _epoch = 0;
@@ -1417,6 +1418,7 @@ class IntercomEngine extends ChangeNotifier {
     musicTitle = '';
     musicActive = false;
     musicPlaying = false;
+    _musicPausedByInterruption = false;
     unawaited(bridge.musicStop());
     _musicNotify();
   }
@@ -1446,6 +1448,13 @@ class IntercomEngine extends ChangeNotifier {
     _setState(IntercomState.paused);
     _applyAudioState();
     _updateServiceText();
+    // Pause the shared track on BOTH phones while the call is active.
+    if (musicPlaying) {
+      _musicPausedByInterruption = true;
+      _session?.connection.send(SignalMessage(
+          'music_control', <String, dynamic>{'action': 'pause'}));
+      _applyMusicControl('pause');
+    }
     // Safety net: if the platform never reports the end of the interruption
     // (missed event, OEM quirk), force a recovery instead of staying paused.
     _interruptionWatchdog?.cancel();
@@ -1472,6 +1481,13 @@ class IntercomEngine extends ChangeNotifier {
     }
     _applyAudioState(restartMic: true);
     _updateServiceText();
+    // Bring the shared track back on both phones after the call.
+    if (_musicPausedByInterruption) {
+      _musicPausedByInterruption = false;
+      _session?.connection.send(SignalMessage(
+          'music_control', <String, dynamic>{'action': 'resume'}));
+      _applyMusicControl('resume');
+    }
   }
 
   // -------------------------------------------------------------------
