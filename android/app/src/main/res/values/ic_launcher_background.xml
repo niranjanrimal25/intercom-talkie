@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the background of the generated launcher art. -->
+    <color name="ic_launcher_background">#191F25</color>
+</resources>
